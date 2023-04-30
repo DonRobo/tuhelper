@@ -11,6 +11,7 @@ plugins {
     kotlin("jvm") version "1.8.20"
     kotlin("plugin.spring") version "1.8.20"
 
+    id("org.springdoc.openapi-gradle-plugin") version "1.6.0"
     id("nu.studer.jooq") version "8.2"
     id("org.flywaydb.flyway") version "9.8.1"
 }
@@ -37,6 +38,8 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
 
     implementation("org.jsoup:jsoup:1.15.4")
+
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
 
     jooqGenerator("org.postgresql:postgresql:42.6.0")
 
@@ -142,4 +145,21 @@ tasks.named<JooqGenerate>("generateJooq") {
     inputs.dir("$projectDir/src/main/resources/db/migration")
 
     allInputsDeclared.set(true)
+}
+
+openApi {
+    outputDir.set(file("$buildDir/docs"))
+    outputFileName.set("swagger.json")
+    waitTimeInSeconds.set(10)
+    customBootRun {
+        environment.put("DB_URL", "jdbc:postgresql://$buildDatabaseHost:$buildDatabasePort/$buildDatabaseName")
+        environment.put("DB_USER", buildProps["build.database.username"] as String)
+        environment.put("DB_PASSWORD", buildProps["build.database.password"] as String)
+
+        args.set(listOf("--spring.profiles.active=springdoc"))
+    }
+}
+
+springBoot {
+    mainClass.set("at.robert.tuhelper.TuHelperApplicationKt")
 }
