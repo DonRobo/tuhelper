@@ -1,5 +1,6 @@
 package at.robert.tuhelper.tugraz
 
+import at.robert.tuhelper.log
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
@@ -95,6 +96,11 @@ class TUGrazClient(
             val ects = columns[4].text().toIntOrNull()
 
             TUGrazClientStudy(number, name, ects, type)
+        }.also {
+            val duplicates = it.groupBy { study -> study.number }.filterValues { studies -> studies.size > 1 }
+            duplicates.forEach { (number, studies) ->
+                log.warn("Duplicate study number '$number' found: ${studies.joinToString { it.name }}")
+            }
         }.distinctBy { study -> study.number }
     }
 

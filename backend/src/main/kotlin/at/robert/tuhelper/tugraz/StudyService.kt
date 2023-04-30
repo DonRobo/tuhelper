@@ -4,6 +4,7 @@ import at.robbert.tuhelper.jooq.enums.JStudyType
 import at.robbert.tuhelper.jooq.tables.records.JStudyRecord
 import at.robert.tuhelper.data.Study
 import at.robert.tuhelper.data.StudyType
+import at.robert.tuhelper.log
 import at.robert.tuhelper.repository.StudyRepository
 import kotlinx.coroutines.runBlocking
 import org.springframework.stereotype.Service
@@ -15,8 +16,9 @@ class StudyService(
 ) {
     fun updateAlLStudies() {
         val studies = runBlocking { tuGrazClient.fetchStudies() }
+        log.debug("Fetched ${studies.size} studies")
 
-        studyRepository.cleanAndInsert(studies.map { study ->
+        val inserted = studyRepository.cleanAndInsert(studies.map { study ->
             JStudyRecord().apply {
                 this.name = study.name
                 this.number = study.number
@@ -24,6 +26,7 @@ class StudyService(
                 this.type = JStudyType.valueOf(study.type.name)
             }
         })
+        log.debug("Inserted $inserted studies")
     }
 
     fun getStudies(): List<Study> {
@@ -40,6 +43,7 @@ class StudyService(
 
         val studies = studiesFromDb()
         return studies.ifEmpty {
+            log.info("No studies found in database, fetching from TUGraz")
             updateAlLStudies()
             studiesFromDb()
         }
