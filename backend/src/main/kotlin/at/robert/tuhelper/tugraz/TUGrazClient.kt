@@ -6,29 +6,52 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.springframework.stereotype.Component
 
-data class Study(
-    val id: Int,
+enum class TUGrazClientStudyType(
+    val text: String
+) {
+    BACHELOR("Bachelorstudium"),
+    INDIVIDUAL_BACHELOR("Individuelles Bachelorstudium"),
+    INDIVIDUAL_MASTER("Individuelles Masterstudium"),
+    MASTER("Masterstudium"),
+    DOCTORATE("Doktoratsstudium"),
+    UNIVERSITY_COURSE("Universitätslehrgang"),
+    OTHER("sonstiges Studium"),
+    TEACHING_EXTENSION("Erweiterungsstudium Lehramt"),
+    TEACHING_BACHELOR("Lehramt Bachelor"),
+    TEACHING_MASTER("Lehramt Master");
+
+    companion object {
+        fun fromText(text: String): TUGrazClientStudyType {
+            return values().singleOrNull { it.text == text }
+                ?: throw IllegalArgumentException("No TUGrazClientStudyType found for text '$text'")
+        }
+    }
+}
+
+data class TUGrazClientStudy(
+    val number: String,
     val name: String,
-    val ects: Int,
+    val ects: Int?,
+    val type: TUGrazClientStudyType
 )
 
-interface Node {
+private interface Node {
     val studyId: Int
     val nodeNr: Int?
     val nodeName: String?
 }
 
-data class StudyComponent(
+private data class StudyComponent(
     val name: String,
     val ects: Int,
     override val nodeNr: Int,
     override val nodeName: String,
     override val studyId: Int,
-) : Node {
-}
+) : Node
 
-data class StudyComponentChoice(
+private data class StudyComponentChoice(
     val name: String,
     val sst: Int,
     override val nodeNr: Int,
@@ -36,7 +59,7 @@ data class StudyComponentChoice(
     override val studyId: Int,
 ) : Node
 
-data class StudyModule(
+private data class StudyModule(
     val name: String,
     val ects: Int?,
     val sst: Int?,
@@ -45,20 +68,38 @@ data class StudyModule(
     override val studyId: Int,
 ) : Node
 
-data class StudyCourse(
+private data class StudyCourse(
     val name: String,
     val ects: Int?,
     val sst: Int?,
     val semester: Int,
 )
 
-class TUGrazClient {
+@Component
+class TUGrazClient(
+    private val httpClient: HttpClient,
+) {
 
-    private val client = HttpClient(CIO) {
+    suspend fun fetchStudies(): List<TUGrazClientStudy> {
+        val response = httpClient.get {
+            url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpPortfolio.wbStpList")
+        }
+        val doc = Jsoup.parse(response.body<String>())
+
+        return doc.select("tr.coRow.hi.coTableR.invisible").map { study ->
+            val columns = study.select("td").also { require(it.size == 8) }
+
+            val number = columns[0].text()
+            val name = columns[1].text()
+            val type = TUGrazClientStudyType.fromText(columns[2].text())
+            val ects = columns[4].text().toIntOrNull()
+
+            TUGrazClientStudy(number, name, ects, type)
+        }.distinctBy { study -> study.number }
     }
 
     private suspend fun fetchNode(node: Node): Document {
-        val response = client.get {
+        val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpCs.cbSpoTree/NC_5211")
             parameter("pStStudiumNr", "")
             parameter("pStpStpNr", node.studyId)
@@ -145,8 +186,8 @@ class TUGrazClient {
         return studyComponents
     }
 
-    suspend fun getStudyComponents(studiumId: Int): List<StudyComponent> {
-        val response = client.get {
+    private suspend fun getStudyComponents(studiumId: Int): List<StudyComponent> {
+        val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbstpcs.showSpoTree")
             parameter("pSJNr", "1666")
             parameter("pStStudiumNr", "")
@@ -171,7 +212,7 @@ class TUGrazClient {
     }
 
     private suspend fun request(params: Map<String, String>): Document {
-        val response = client.get {
+        val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbstpcs.showSpoTree")
             params.forEach { (k, v) ->
                 parameter(k, v)
@@ -181,7 +222,7 @@ class TUGrazClient {
     }
 
     private suspend fun request2(params: Map<String, String>): Document {
-        val response = client.get {
+        val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpCs.cbSpoTree/NC_5211")
             params.forEach { (k, v) ->
                 parameter(k, v)
@@ -228,7 +269,7 @@ class TUGrazClient {
         println(doc)
     }
 
-    suspend fun getStudyComponentChoices(studyComponent: StudyComponent): List<StudyComponentChoice> {
+    private suspend fun getStudyComponentChoices(studyComponent: StudyComponent): List<StudyComponentChoice> {
         val doc = fetchNode(studyComponent)
         val parsedNodes = doc.parseNodes(studyComponent.studyId)
 
@@ -243,7 +284,7 @@ class TUGrazClient {
         }
     }
 
-    suspend fun getStudyModules(studyComponentChoice: StudyComponentChoice): List<StudyModule> {
+    private suspend fun getStudyModules(studyComponentChoice: StudyComponentChoice): List<StudyModule> {
         val doc = fetchNode(studyComponentChoice)
         val parsedNodes = doc.parseNodes(studyComponentChoice.studyId)
 
@@ -259,7 +300,7 @@ class TUGrazClient {
         }
     }
 
-    suspend fun getCourses(studyModule: StudyModule): List<StudyCourse> {
+    private suspend fun getCourses(studyModule: StudyModule): List<StudyCourse> {
         val doc = fetchNode(studyModule)
         val parsedNodes = doc.parseNodes(studyModule.studyId)
 
@@ -273,29 +314,40 @@ class TUGrazClient {
         }
     }
 
+    companion object {
+
+        suspend fun runTests() {
+            val client = TUGrazClient(HttpClient(CIO) {})
+//    client.parseMaster()
+//    client.parseSubMaster()
+//            val studyComponents = client.getStudyComponents(1022)
+//            studyComponents.forEach {
+//                println(it)
+//            }
+//            val studyComponent = studyComponents.first()
+//            val studyComponentChoices: List<StudyComponentChoice> = client.getStudyComponentChoices(studyComponent)
+//            studyComponentChoices.forEach {
+//                println(it)
+//            }
+//            val studyComponentChoice = studyComponentChoices.first()
+//            val studyModules = client.getStudyModules(studyComponentChoice)
+//            studyModules.forEach {
+//                println(it)
+//            }
+//            val studyModule = studyModules.first()
+//            val courses = client.getCourses(studyModule)
+//            courses.forEach {
+//                println(it)
+//            }
+            client.fetchStudies().filter { it.type == TUGrazClientStudyType.MASTER }.forEach { fetchStudy ->
+                println(fetchStudy)
+            }
+        }
+
+    }
+
 }
 
 suspend fun main() {
-    val client = TUGrazClient()
-//    client.parseMaster()
-//    client.parseSubMaster()
-    val studyComponents = client.getStudyComponents(1022)
-    studyComponents.forEach {
-        println(it)
-    }
-    val studyComponent = studyComponents.first()
-    val studyComponentChoices: List<StudyComponentChoice> = client.getStudyComponentChoices(studyComponent)
-    studyComponentChoices.forEach {
-        println(it)
-    }
-    val studyComponentChoice = studyComponentChoices.first()
-    val studyModules = client.getStudyModules(studyComponentChoice)
-    studyModules.forEach {
-        println(it)
-    }
-    val studyModule = studyModules.first()
-    val courses = client.getCourses(studyModule)
-    courses.forEach {
-        println(it)
-    }
+    TUGrazClient.runTests()
 }

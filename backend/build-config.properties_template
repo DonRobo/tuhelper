@@ -1,0 +1,10 @@
+build.database.superuser.name=
+build.database.superuser.password=
+build.database.superuser.database=
+
+build.database.name=
+build.database.username=
+build.database.password=
+build.database.host=localhost
+build.database.port=5432
+build.database.driver=org.postgresql.Driver
