@@ -1,24 +1,28 @@
 import React from 'react';
-import logo from './logo.svg';
 import './App.css';
+import {Study, TestControllerService} from "./generated";
+
+function StudyList() {
+    const [studies, setStudies] = React.useState([] as Study[]);
+
+    React.useEffect(() => {
+        TestControllerService.studies().then(studies => {
+            setStudies(studies);
+        });
+    }, []);
+
+    return <div>
+        <h1>Studies</h1>
+        <ul>
+            {studies.map(study => <li key={study.number}>{study.name}</li>)}
+        </ul>
+    </div>;
+}
 
 function App() {
     return (
-        <div className="App">
-            <header className="App-header">
-                <img src={logo} className="App-logo" alt="logo"/>
-                <p>
-                    Edit <code>src/App.tsx</code> and save to reload!
-                </p>
-                <a
-                    className="App-link"
-                    href="https://reactjs.org"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    Learn React
-                </a>
-            </header>
+        <div>
+            <StudyList/>
         </div>
     );
 }
