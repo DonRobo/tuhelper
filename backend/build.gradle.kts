@@ -150,12 +150,6 @@ tasks.named<JooqGenerate>("generateJooq") {
     allInputsDeclared.set(true)
 }
 
-tasks.named("compileKotlin") {
-    dependsOn("generateJooq")
-
-    outputs.cacheIf { true }
-}
-
 openApi {
     outputDir.set(file("$buildDir/docs"))
     outputFileName.set("swagger.json")
