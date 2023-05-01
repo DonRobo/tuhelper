@@ -1,6 +1,7 @@
 import nu.studer.gradle.jooq.JooqGenerate
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jooq.meta.jaxb.Logging
+import org.springdoc.openapi.gradle.plugin.OpenApiGeneratorTask
 import java.sql.DriverManager
 import java.util.*
 
@@ -143,8 +144,16 @@ tasks.named<JooqGenerate>("generateJooq") {
     dependsOn("flywayMigrate")
 
     inputs.dir("$projectDir/src/main/resources/db/migration")
+    outputs.dir("$buildDir/generated/jooq/primary")
+    outputs.cacheIf { true }
 
     allInputsDeclared.set(true)
+}
+
+tasks.named("compileKotlin") {
+    dependsOn("generateJooq")
+
+    outputs.cacheIf { true }
 }
 
 openApi {
@@ -162,4 +171,15 @@ openApi {
 
 springBoot {
     mainClass.set("at.robert.tuhelper.TuHelperApplicationKt")
+}
+
+tasks.withType<OpenApiGeneratorTask> {
+    outputs.file("$buildDir/docs/swagger.json")
+    outputs.cacheIf { true }
+}
+
+tasks.all {
+    if (name == "forkedSpringBootRun") {
+        mustRunAfter("compileTestJava", "test", "bootJar", "jar")
+    }
 }
