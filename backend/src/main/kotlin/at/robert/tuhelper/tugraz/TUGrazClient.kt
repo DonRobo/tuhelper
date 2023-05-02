@@ -4,11 +4,11 @@ import at.robert.tuhelper.getUriParameter
 import at.robert.tuhelper.log
 import io.ktor.client.*
 import io.ktor.client.call.*
-import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.springframework.stereotype.Component
+import java.math.BigDecimal
 
 enum class TUGrazClientStudyType(
     val text: String
@@ -35,12 +35,12 @@ enum class TUGrazClientStudyType(
 data class TUGrazClientStudy(
     val number: String,
     val name: String,
-    val ects: Int?,
+    val ects: BigDecimal?,
     val type: TUGrazClientStudyType,
     val studyId: Int,
 )
 
-private interface TUGrazClientNode {
+interface TUGrazClientNode {
     val studyId: Int
     val nodeNr: Int?
     val nodeName: String?
@@ -48,34 +48,31 @@ private interface TUGrazClientNode {
 
 data class TUGrazClientStudySegment(
     val name: String,
-    val ects: Int?,
-    override val nodeNr: Int,
-    override val nodeName: String,
+    val ects: BigDecimal?,
+    override val nodeNr: Int?,
+    override val nodeName: String?,
     override val studyId: Int,
 ) : TUGrazClientNode
 
-private data class TUGrazClientStudySegmentChoice(
+data class TUGrazClientStudySegmentModuleGroup(
     val name: String,
-    val sst: Int,
-    override val nodeNr: Int,
-    override val nodeName: String,
+    override val nodeNr: Int?,
+    override val nodeName: String?,
     override val studyId: Int,
 ) : TUGrazClientNode
 
-private data class StudyModule(
+data class TUGrazClientStudyModule(
     val name: String,
-    val ects: Int?,
-    val sst: Int?,
-    override val nodeNr: Int,
-    override val nodeName: String,
+    val ects: BigDecimal?,
+    override val nodeNr: Int?,
+    override val nodeName: String?,
     override val studyId: Int,
 ) : TUGrazClientNode
 
-private data class StudyCourse(
+data class TUGrazClientStudyCourse(
     val name: String,
-    val ects: Int?,
-    val sst: Int?,
-    val semester: Int,
+    val ects: BigDecimal?,
+    val semester: Int?,
 )
 
 @Component
@@ -84,6 +81,7 @@ class TUGrazClient(
 ) {
 
     suspend fun fetchStudies(): List<TUGrazClientStudy> {
+        log.debug("Fetching studies")
         val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpPortfolio.wbStpList")
         }
@@ -96,7 +94,7 @@ class TUGrazClient(
             val number = columns[0].text()
             val name = columns[1].text()
             val type = TUGrazClientStudyType.fromText(columns[2].text())
-            val ects = columns[4].text().toIntOrNull()
+            val ects = columns[4].text().replace(",", ".").toBigDecimalOrNull()
             val studyId = link.getUriParameter("pStpStpNr")!!.toInt()
 
             TUGrazClientStudy(number, name, ects, type, studyId)
@@ -105,10 +103,15 @@ class TUGrazClient(
             duplicates.forEach { (number, studies) ->
                 log.warn("Duplicate study number '$number' found: ${studies.joinToString { it.name }}")
             }
-        }.distinctBy { study -> study.number }
+        }.distinctBy { study -> study.number }.also {
+            log.debug("Fetched ${it.size} studies")
+        }
     }
 
-    private suspend fun fetchNode(node: TUGrazClientNode): Document {
+    private suspend fun fetchNode(node: TUGrazClientNode): Document? {
+        if (node.nodeNr == null || node.nodeName == null) {
+            return null
+        }
         val response = httpClient.get {
             url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpCs.cbSpoTree/NC_5211")
             parameter("pStStudiumNr", "")
@@ -139,8 +142,7 @@ class TUGrazClient(
         override val nodeName: String?,
         val name: String,
         val semester: Int?,
-        val ects: Int?,
-        val sst: Int?,
+        val ects: BigDecimal?,
     ) : TUGrazClientNode
 
     private fun Document.parseNodes(studyId: Int): List<TUGrazClientParsedNode> {
@@ -174,11 +176,8 @@ class TUGrazClient(
             val ects = row // tr
                 .select("div.R")[0]
                 ?.text()
-                ?.toIntOrNull()
-            val sst = row // tr
-                .select("div.R")[1]
-                ?.text()
-                ?.toIntOrNull()
+                ?.replace(",", ".")
+                ?.toBigDecimalOrNull()
 
             studySegments.add(
                 TUGrazClientParsedNode(
@@ -188,7 +187,6 @@ class TUGrazClient(
                     name = name,
                     semester = semester,
                     ects = ects,
-                    sst = sst,
                 )
             )
         }
@@ -214,150 +212,67 @@ class TUGrazClient(
             TUGrazClientStudySegment(
                 name = it.name,
                 ects = it.ects,
-                nodeNr = it.nodeNr!!,
-                nodeName = it.nodeName!!,
+                nodeNr = it.nodeNr,
+                nodeName = it.nodeName,
                 studyId = it.studyId,
             )
         }
     }
 
-    private suspend fun request(params: Map<String, String>): Document {
-        val response = httpClient.get {
-            url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbstpcs.showSpoTree")
-            params.forEach { (k, v) ->
-                parameter(k, v)
-            }
-        }
-        return Jsoup.parse(response.body<String>())
-    }
-
-    private suspend fun request2(params: Map<String, String>): Document {
-        val response = httpClient.get {
-            url("https://online.tugraz.at/tug_online/pl/ui/\$ctx;design=ca2;header=max;lang=de/wbStpCs.cbSpoTree/NC_5211")
-            params.forEach { (k, v) ->
-                parameter(k, v)
-            }
-        }
-        return Jsoup.parse(response.body<String>())
-    }
-
-    private suspend fun parseMaster() {
-        val doc = request(
-            mapOf(
-                "pSJNr" to "1666",
-                "pStStudiumNr" to "",
-                "pStartSemester" to "",
-                "pStpStpNr" to "1022"
-            )
-        )
-
-        doc.select("tr td a.KnotenLink").forEach { element ->
-            println(element.text())
-            println(element)
-        }
-    }
-
-    private suspend fun parseSubMaster() {
-        //?pStStudiumNr=&pStpStpNr=1022&pStPersonNr=&pSJNr=1666&pIsStudSicht=FALSE&pShowErg=J&pHideInactive=TRUE&pCaller=&pStpKnotenNr=101258&pId=kn101258&pAction=0&pStpSTypNr=&pStartSemester=
-        val doc = request2(
-            mapOf(
-                "pStStudiumNr" to "",
-                "pStpStpNr" to "1022",
-                "pStPersonNr" to "",
-                "pSJNr" to "1666",
-                "pIsStudSicht" to "FALSE",
-                "pShowErg" to "J",
-                "pHideInactive" to "TRUE",
-                "pCaller" to "",
-                "pStpKnotenNr" to "101258",
-                "pId" to "kn101258",
-                "pAction" to "0",
-                "pStpSTypNr" to "",
-                "pStartSemester" to ""
-            )
-        )
-        println(doc)
-    }
-
-    private suspend fun getStudySegmentChoices(studySegment: TUGrazClientStudySegment): List<TUGrazClientStudySegmentChoice> {
+    suspend fun getStudySegmentModuleGroups(studySegment: TUGrazClientStudySegment): List<TUGrazClientStudySegmentModuleGroup> {
+        log.debug("Fetching module groups for study segment ${studySegment.name}")
         val doc = fetchNode(studySegment)
-        val parsedNodes = doc.parseNodes(studySegment.studyId)
+        val parsedNodes = doc?.parseNodes(studySegment.studyId) ?: emptyList<TUGrazClientParsedNode>().also {
+            log.warn("Failed to fetch module groups for study segment ${studySegment.name}")
+        }
 
         return parsedNodes.map {
-            TUGrazClientStudySegmentChoice(
+            TUGrazClientStudySegmentModuleGroup(
                 name = it.name,
-                nodeNr = it.nodeNr!!,
-                nodeName = it.nodeName!!,
+                nodeNr = it.nodeNr,
+                nodeName = it.nodeName,
                 studyId = it.studyId,
-                sst = it.sst!!,
             )
+        }.also {
+            log.debug("Fetched ${it.size} module groups for study segment ${studySegment.name}")
         }
     }
 
-    private suspend fun getStudyModules(studySegmentChoice: TUGrazClientStudySegmentChoice): List<StudyModule> {
-        val doc = fetchNode(studySegmentChoice)
-        val parsedNodes = doc.parseNodes(studySegmentChoice.studyId)
+    suspend fun getStudyModules(studySegmentModuleGroup: TUGrazClientStudySegmentModuleGroup): List<TUGrazClientStudyModule> {
+        log.debug("Fetching modules for module group ${studySegmentModuleGroup.name}")
+        val doc = fetchNode(studySegmentModuleGroup)
+        val parsedNodes = doc?.parseNodes(studySegmentModuleGroup.studyId) ?: emptyList<TUGrazClientParsedNode>().also {
+            log.warn("Failed to fetch modules for module group ${studySegmentModuleGroup.name}")
+        }
 
         return parsedNodes.map {
-            StudyModule(
+            TUGrazClientStudyModule(
                 name = it.name,
-                nodeNr = it.nodeNr!!,
-                nodeName = it.nodeName!!,
+                nodeNr = it.nodeNr,
+                nodeName = it.nodeName,
                 studyId = it.studyId,
                 ects = it.ects,
-                sst = it.sst,
             )
+        }.also {
+            log.debug("Fetched ${it.size} modules for module group ${studySegmentModuleGroup.name}")
         }
     }
 
-    private suspend fun getCourses(studyModule: StudyModule): List<StudyCourse> {
+    suspend fun getCourses(studyModule: TUGrazClientStudyModule): List<TUGrazClientStudyCourse> {
+        log.debug("Fetching courses for module ${studyModule.name}")
         val doc = fetchNode(studyModule)
-        val parsedNodes = doc.parseNodes(studyModule.studyId)
+        val parsedNodes = doc?.parseNodes(studyModule.studyId) ?: emptyList<TUGrazClientParsedNode>().also {
+            log.warn("Failed to fetch courses for module ${studyModule.name}")
+        }
 
         return parsedNodes.map {
-            StudyCourse(
+            TUGrazClientStudyCourse(
                 name = it.name,
                 ects = it.ects,
-                sst = it.sst,
-                semester = it.semester!!,
+                semester = it.semester,
             )
+        }.also {
+            log.debug("Fetched ${it.size} courses for module ${studyModule.name}")
         }
     }
-
-    companion object {
-
-        suspend fun runTests() {
-            val client = TUGrazClient(HttpClient(CIO) {})
-//    client.parseMaster()
-//    client.parseSubMaster()
-//            val studySegments = client.getStudySegments(1022)
-//            studySegments.forEach {
-//                println(it)
-//            }
-//            val studySegment = studySegments.first()
-//            val studySegmentChoices: List<StudySegmentChoice> = client.getStudySegmentChoices(studySegment)
-//            studySegmentChoices.forEach {
-//                println(it)
-//            }
-//            val studySegmentChoice = studySegmentChoices.first()
-//            val studyModules = client.getStudyModules(studySegmentChoice)
-//            studyModules.forEach {
-//                println(it)
-//            }
-//            val studyModule = studyModules.first()
-//            val courses = client.getCourses(studyModule)
-//            courses.forEach {
-//                println(it)
-//            }
-            client.fetchStudies().filter { it.type == TUGrazClientStudyType.MASTER }.forEach { fetchStudy ->
-                println(fetchStudy)
-            }
-        }
-
-    }
-
-}
-
-suspend fun main() {
-    TUGrazClient.runTests()
 }

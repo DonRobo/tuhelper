@@ -2,12 +2,14 @@ package at.robert.tuhelper.tugraz
 
 import at.robbert.tuhelper.jooq.enums.JStudyType
 import at.robbert.tuhelper.jooq.tables.records.JStudyRecord
-import at.robbert.tuhelper.jooq.tables.records.JStudySegmentRecord
 import at.robert.tuhelper.data.Study
 import at.robert.tuhelper.data.StudyData
+import at.robert.tuhelper.data.StudySegment
 import at.robert.tuhelper.data.StudyType
 import at.robert.tuhelper.log
 import at.robert.tuhelper.repository.StudyRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -19,7 +21,6 @@ class StudyService(
 ) {
     fun updateAlLStudies() {
         val studies = runBlocking { tuGrazClient.fetchStudies() }
-        log.debug("Fetched ${studies.size} studies")
 
         val inserted = studyRepository.cleanAndInsertStudies(studies.map { study ->
             JStudyRecord().apply {
@@ -68,20 +69,48 @@ class StudyService(
 
         return StudyData(
             studyRepository.fetchStudy(studyNumber),
-            studyRepository.fetchStudySegments(studyNumber)
+            studyRepository.fetchStudySegments(studyNumber).map {
+                StudySegment(
+                    it.id,
+                    it.name,
+                    it.ects,
+                    emptyList()
+                )
+            }
         )
     }
 
     private fun fetchAndInsertStudyData(studyId: Int, studyNumber: String) {
-        val segments = runBlocking {
-            tuGrazClient.getStudySegments(studyId)
-        }.map {
-            JStudySegmentRecord().apply {
-                this.name = it.name
-                this.ects = it.ects
-                this.studyNumber = studyNumber
+        val fetchedCourses = runBlocking {
+            val segments = tuGrazClient.getStudySegments(studyId).map { FetchedStudySegment(it) }
+            val segmentModuleGroups = segments.map { segment ->
+                async {
+                    tuGrazClient.getStudySegmentModuleGroups(segment.studySegment).map {
+                        FetchedModuleGroup(it, segment)
+                    }
+                }
             }
+            val modules = segmentModuleGroups.map {
+                async {
+                    it.await().flatMap { moduleGroup ->
+                        tuGrazClient.getStudyModules(moduleGroup.moduleGroup).map {
+                            FetchedModule(it, moduleGroup)
+                        }
+                    }
+                }
+            }
+            val courses = modules.map {
+                async {
+                    it.await().flatMap { module ->
+                        tuGrazClient.getCourses(module.module).map {
+                            FetchedCourse(it, module)
+                        }
+                    }
+                }
+            }
+            courses.awaitAll().flatten()
         }
-        studyRepository.cleanAndInsertStudySegments(studyNumber, segments)
+        log.info("Fetched ${fetchedCourses.size} courses for study $studyNumber")
+        studyRepository.cleanAndInsertStudyData(studyNumber, fetchedCourses)
     }
 }

@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "TU Helper",
+  "name": "TU Helper helps you find the best master major/minor",
   "icons": [
     {
       "src": "favicon.ico",

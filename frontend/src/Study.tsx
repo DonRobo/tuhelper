@@ -1,6 +1,6 @@
 import {Link, useParams} from "react-router-dom";
 import React, {useEffect, useState} from "react";
-import {StudyData, StudyDataControllerService} from "./generated";
+import {StudyData, StudyDataControllerService, StudySegment} from "./generated";
 
 export function Study() {
     const {number} = useParams();
@@ -32,8 +32,23 @@ export function Study() {
             </div>
             <h2>Segments</h2>
             <ul>
-                {studyData.segments.map(segment => <li key={segment}>{segment}</li>)}
+                {studyData.segments.map(segment => <li key={segment.id}>
+                    <ShowStudySegment {...segment}/>
+                </li>)}
             </ul>
         </div>
     }
+}
+
+function ShowStudySegment(studySegment: StudySegment) {
+    return <>
+        <div>{studySegment.name} ({studySegment.ects} ECTS)</div>
+        <ul>
+            {
+                studySegment.moduleGroups.map(moduleGroup => <li key={moduleGroup.id}>
+                    <div>{moduleGroup.name}</div>
+                </li>)
+            }
+        </ul>
+    </>
 }

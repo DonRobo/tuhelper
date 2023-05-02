@@ -1,5 +1,7 @@
 package at.robert.tuhelper.data
 
+import java.math.BigDecimal
+
 enum class StudyType {
     BACHELOR,
     INDIVIDUAL_BACHELOR,
@@ -16,6 +18,6 @@ enum class StudyType {
 data class Study(
     val number: String,
     val name: String,
-    val ects: Int?,
+    val ects: BigDecimal?,
     val type: StudyType
 )
