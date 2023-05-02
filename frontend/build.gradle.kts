@@ -69,13 +69,17 @@ tasks.register("clean") {
     doFirst {
         file("node_modules").deleteRecursively()
         file("build").deleteRecursively()
-        file("generated").deleteRecursively()
+        file("$projectDir/src/generated").deleteRecursively()
     }
 }
 
 tasks.register<NpxTask>("generateOpenApiBindings") {
     group = "openApi"
     dependsOn(":backend:generateOpenApiDocs")
+
+    doFirst {
+        file("$projectDir/src/generated").deleteRecursively()
+    }
 
     this.command.set("openapi-typescript-codegen")
     this.args.set(listOf("--input", "../backend/build/docs/swagger.json", "--output", "./src/generated"))

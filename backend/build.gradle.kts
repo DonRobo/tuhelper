@@ -152,6 +152,7 @@ tasks.named<JooqGenerate>("generateJooq") {
 
 openApi {
     outputDir.set(file("$buildDir/docs"))
+    apiDocsUrl.set("http://localhost:18080/v3/api-docs")
     outputFileName.set("swagger.json")
     waitTimeInSeconds.set(10)
     customBootRun {
@@ -168,6 +169,9 @@ springBoot {
 }
 
 tasks.withType<OpenApiGeneratorTask> {
+    inputs.dir("$projectDir/src/main/kotlin/at/robert/tuhelper/controller")
+    inputs.dir("$projectDir/src/main/kotlin/at/robert/tuhelper/data")
+
     outputs.file("$buildDir/docs/swagger.json")
     outputs.cacheIf { true }
 }

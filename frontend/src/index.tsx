@@ -4,6 +4,7 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import {OpenAPI} from "./generated";
+import {BrowserRouter} from "react-router-dom";
 
 const root = ReactDOM.createRoot(
     document.getElementById('root') as HTMLElement
@@ -13,7 +14,9 @@ OpenAPI.BASE = "";
 
 root.render(
     <React.StrictMode>
-        <App/>
+        <BrowserRouter>
+            <App/>
+        </BrowserRouter>
     </React.StrictMode>
 );
 

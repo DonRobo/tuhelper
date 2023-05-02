@@ -1,12 +1,13 @@
 import React from "react";
-import {Study, TestControllerService} from "./generated";
+import {Link} from "react-router-dom";
+import {Study, StudyDataControllerService} from "./generated";
 
 export function StudyList() {
-    const [studies, setStudies] = React.useState([] as Study[]);
+    const [studies, setStudies] = React.useState<Study[]>([]);
     const [selectedType, setSelectedType] = React.useState<Study.type | null>(null);
 
     React.useEffect(() => {
-        TestControllerService.studies().then(studies => {
+        StudyDataControllerService.studies().then(studies => {
             setStudies(studies);
         });
     }, []);
@@ -48,8 +49,12 @@ export function StudyList() {
                 <tbody>
                 {filteredStudies.map((study) => (
                     <tr key={study.number}>
-                        <td>{study.number}</td>
-                        <td>{study.name}</td>
+                        <td>
+                            <Link to={`/study/${study.number}`}>{study.number}</Link>
+                        </td>
+                        <td>
+                            <Link to={`/study/${study.number}`}>{study.name}</Link>
+                        </td>
                         <td>{study.type}</td>
                         <td>{study.ects}</td>
                     </tr>
