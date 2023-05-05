@@ -30,6 +30,9 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-jooq")
     implementation("org.springframework.boot:spring-boot-starter-web")
+
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
+
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.flywaydb:flyway-core")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -39,8 +42,7 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
 
     implementation("org.jsoup:jsoup:1.15.4")
-
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
+    implementation("org.choco-solver:choco-solver:4.10.12")
 
     jooqGenerator("org.postgresql:postgresql:42.6.0")
 

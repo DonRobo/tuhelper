@@ -2,10 +2,7 @@ package at.robert.tuhelper.tugraz
 
 import at.robbert.tuhelper.jooq.enums.JStudyType
 import at.robbert.tuhelper.jooq.tables.records.JStudyRecord
-import at.robert.tuhelper.data.Study
-import at.robert.tuhelper.data.StudyData
-import at.robert.tuhelper.data.StudySegment
-import at.robert.tuhelper.data.StudyType
+import at.robert.tuhelper.data.*
 import at.robert.tuhelper.log
 import at.robert.tuhelper.repository.StudyRepository
 import kotlinx.coroutines.async
@@ -74,7 +71,25 @@ class StudyService(
                     it.id,
                     it.name,
                     it.ects,
-                    emptyList()
+                    studyRepository.fetchStudyModuleGroups(studyNumber, it.id).map { moduleGroupRecord ->
+                        StudyModuleGroup(
+                            id = moduleGroupRecord.id,
+                            name = moduleGroupRecord.name,
+                            modules = studyRepository.fetchModules(moduleGroupRecord.id).map { moduleRecord ->
+                                StudyModule(
+                                    id = moduleRecord.id,
+                                    name = moduleRecord.name,
+                                    courses = studyRepository.fetchCourses(moduleRecord.id).map { courseRecord ->
+                                        Course(
+                                            id = courseRecord.id,
+                                            name = courseRecord.name,
+                                            ects = courseRecord.ects,
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    }
                 )
             }
         )

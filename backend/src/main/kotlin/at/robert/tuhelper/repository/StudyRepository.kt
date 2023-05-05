@@ -4,6 +4,7 @@ import at.robbert.tuhelper.jooq.Tables
 import at.robbert.tuhelper.jooq.tables.records.*
 import at.robert.tuhelper.data.Study
 import at.robert.tuhelper.data.StudyType
+import at.robert.tuhelper.fetchInto
 import at.robert.tuhelper.log
 import at.robert.tuhelper.tugraz.FetchedCourse
 import at.robert.tuhelper.tugraz.FetchedModule
@@ -23,6 +24,12 @@ class StudyRepository(
 
     private val s = Tables.STUDY.`as`("s")
     private val ss = Tables.STUDY_SEGMENT.`as`("ss")
+    private val mg = Tables.MODULE_GROUP.`as`("mg")
+    private val m = Tables.MODULE.`as`("m")
+    private val mgm = Tables.MODULE_GROUP_MODULE.`as`("mgm")
+    private val c = Tables.COURSE.`as`("c")
+    private val mc = Tables.MODULE_COURSE.`as`("mc")
+    private val ssmg = Tables.STUDY_SEGMENT_MODULE_GROUP.`as`("ssmg")
 
     @Transactional
     fun cleanAndInsertStudies(studies: List<JStudyRecord>): Int {
@@ -189,5 +196,33 @@ class StudyRepository(
             .set(this)
             .returning()
             .fetchOne() as T
+    }
+
+    fun fetchStudyModuleGroups(studyNumber: String, segmentId: Int): List<JModuleGroupRecord> {
+        return ctx.select(mg.asterisk())
+            .from(mg)
+            .join(ssmg).on(ssmg.MODULE_GROUP_ID.eq(mg.ID))
+            .where(mg.STUDY_NUMBER.eq(studyNumber))
+            .and(ssmg.STUDY_SEGMENT_ID.eq(segmentId))
+            .orderBy(mg.ID)
+            .fetchInto()
+    }
+
+    fun fetchModules(moduleGroupId: Int): List<JModuleRecord> {
+        return ctx.select(m.asterisk())
+            .from(m)
+            .join(mgm).on(mgm.MODULE_ID.eq(m.ID))
+            .where(mgm.MODULE_GROUP_ID.eq(moduleGroupId))
+            .orderBy(m.ID)
+            .fetchInto()
+    }
+
+    fun fetchCourses(moduleId: Int): List<JCourseRecord> {
+        return ctx.select(c.asterisk())
+            .from(c)
+            .join(mc).on(mc.COURSE_ID.eq(c.ID))
+            .where(mc.MODULE_ID.eq(moduleId))
+            .orderBy(c.NAME)
+            .fetchInto()
     }
 }

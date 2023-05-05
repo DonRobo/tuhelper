@@ -29,5 +29,5 @@ data class StudyModule(
 data class Course(
     val id: Int,
     val name: String,
-    val ects: BigDecimal
+    val ects: BigDecimal?,
 )

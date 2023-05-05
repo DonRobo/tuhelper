@@ -1,5 +1,6 @@
 package at.robert.tuhelper
 
+import org.jooq.Select
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -25,4 +26,8 @@ fun String.getUriParameters(): Map<String, String> {
         }
     }
     return params
+}
+
+inline fun <reified T> Select<*>.fetchInto(): List<T> {
+    return this.fetchInto(T::class.java)
 }
