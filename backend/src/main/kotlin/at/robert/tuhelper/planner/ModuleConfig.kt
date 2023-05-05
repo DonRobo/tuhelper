@@ -4,9 +4,10 @@ import at.robert.tuhelper.data.Course
 
 class ModuleConfig {
 
-    var required: Boolean? = null
-    var excluded: Boolean? = null
-    val courses = mutableListOf<CourseConfig>()
+    var required: Boolean = false
+    var excluded: Boolean = false
+
+    val courses = mutableListOf<Pair<String, CourseConfig>>()
     val coursesToAdd = mutableListOf<Course>()
     fun required() {
         required = true
@@ -19,7 +20,7 @@ class ModuleConfig {
     fun addCourse(courseName: String, block: CourseConfig.() -> Unit) {
         val config = CourseConfig()
         config.block()
-        courses.add(config)
+        courses.add(courseName to config)
     }
 
     fun excluded() {

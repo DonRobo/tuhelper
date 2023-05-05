@@ -50,6 +50,7 @@ class StudyPlannerService(
                             addModule("Masterarbeit") {
                                 addCourse("Masterarbeit") {
                                     ects = 30
+                                    required = true
                                 }
                             }
                         }

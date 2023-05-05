@@ -25,39 +25,89 @@ class StudyPlanner(
         return configurationStudyPlan.generate()
     }
 
-    private fun generateForModel(model: Model): ConfigurationStudyPlan {
-        return ConfigurationStudyPlan(
+    private fun generateForModel(model: Model): SolverStudyPlan {
+        fun configureCourse(name: String, conf: CourseConfig): SolverCourse {
+            return SolverCourse(
+                Course(
+                    id = -1,
+                    name = name,
+                    ects = conf.ects?.toBigDecimal()
+                ),
+                model.boolVar()
+            )
+        }
+
+        fun configureCourse(course: Course): SolverCourse {
+            return SolverCourse(
+                course,
+                model.boolVar()
+            )
+        }
+
+        fun configureModule(
+            moduleOptions: List<StudyModule>,
+            selector: ModuleSelector,
+            conf: ModuleConfig
+        ): SolverModule? {
+            require(!conf.required || !conf.excluded)
+            if (conf.excluded) return null
+
+            val module = selector.chooseModule(moduleOptions) ?: return null
+            return SolverModule(
+                module,
+                conf.courses.map { (name, courseConf) ->
+                    configureCourse(name, courseConf)
+                } + conf.coursesToAdd.map { course ->
+                    configureCourse(course)
+                },
+                model.boolVar().also {
+                    if (conf.required)
+                        it.eq(1).post()
+                }
+            )
+        }
+
+        fun configureModuleGroup(
+            moduleGroupOptions: List<StudyModuleGroup>,
+            selector: ModuleGroupSelector,
+            conf: ModuleGroupConfig
+        ): SolverModuleGroup {
+            val moduleGroup = selector.chooseModuleGroup(moduleGroupOptions)
+            return SolverModuleGroup(
+                moduleGroup,
+                conf.modules.mapNotNull { (selector, conf) ->
+                    configureModule(moduleGroup.modules, selector, conf)
+                },
+                model.boolVar()
+            )
+        }
+
+        fun configureSegment(selector: SegmentSelector, conf: SegmentConfig): SolverSegment {
+            val segment = selector.chooseSegment(studyData.segments)
+            return SolverSegment(
+                segment,
+                conf.moduleGroups.map { (selector, conf) ->
+                    configureModuleGroup(segment.moduleGroups, selector, conf)
+                }
+            )
+        }
+
+        return SolverStudyPlan(
             config.segmentsConfigs.map { (selector, conf) ->
-                val segment = selector.chooseSegment(studyData.segments)
-                ConfigurationSegment(
-                    segment,
-                    conf.moduleGroups.map { (selector, conf) ->
-                        val moduleGroup = selector.chooseModuleGroup(segment.moduleGroups)
-                        ConfigurationModuleGroup(
-                            moduleGroup,
-                            conf.modules.mapNotNull { (selector, conf) ->
-                                ConfigurationModule(
-                                    selector.chooseModule(moduleGroup.modules) ?: return@mapNotNull null,
-                                    emptyList()
-                                )
-                            },
-                            model.boolVar()
-                        )
-                    }
-                )
+                configureSegment(selector, conf)
             }
         )
     }
 
-    private fun ConfigurationStudyPlan.generate(): StudyPlan {
+    private fun SolverStudyPlan.generate(): StudyPlan {
         return StudyPlan(
-            this.configurationSegments.map {
+            this.solverSegments.map {
                 it.generate()
             }
         )
     }
 
-    private fun ConfigurationSegment.generate(): StudySegment {
+    private fun SolverSegment.generate(): StudySegment {
         return studySegment.copy(
             moduleGroups = moduleGroups.mapNotNull {
                 it.generate()
@@ -65,7 +115,7 @@ class StudyPlanner(
         )
     }
 
-    private fun ConfigurationModuleGroup.generate(): StudyModuleGroup? {
+    private fun SolverModuleGroup.generate(): StudyModuleGroup? {
         return if (chosen.value == 1) {
             studyModuleGroup.copy(
                 modules = modules.mapNotNull {
@@ -77,7 +127,7 @@ class StudyPlanner(
         }
     }
 
-    private fun ConfigurationModule.generate(): StudyModule? {
+    private fun SolverModule.generate(): StudyModule? {
         return studyModule.copy(
             courses = courses.mapNotNull {
                 it.generate()
@@ -87,7 +137,7 @@ class StudyPlanner(
         }
     }
 
-    private fun ConfigurationCourse.generate(): Course? {
+    private fun SolverCourse.generate(): Course? {
         return if (chosen.value == 1) course else null
     }
 
@@ -107,27 +157,28 @@ class StudyPlanner(
         }.distinctBy { it.id }
     }
 
-    data class ConfigurationStudyPlan(
-        val configurationSegments: List<ConfigurationSegment>
+    data class SolverStudyPlan(
+        val solverSegments: List<SolverSegment>
     )
 
-    data class ConfigurationSegment(
+    data class SolverSegment(
         val studySegment: StudySegment,
-        val moduleGroups: List<ConfigurationModuleGroup>
+        val moduleGroups: List<SolverModuleGroup>
     )
 
-    data class ConfigurationModuleGroup(
+    data class SolverModuleGroup(
         val studyModuleGroup: StudyModuleGroup,
-        val modules: List<ConfigurationModule>,
+        val modules: List<SolverModule>,
         val chosen: BoolVar,
     )
 
-    data class ConfigurationModule(
+    data class SolverModule(
         val studyModule: StudyModule,
-        val courses: List<ConfigurationCourse>
+        val courses: List<SolverCourse>,
+        val chosen: BoolVar
     )
 
-    data class ConfigurationCourse(
+    data class SolverCourse(
         val course: Course,
         val chosen: BoolVar
     )
