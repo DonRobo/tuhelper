@@ -80,7 +80,7 @@ class StudyService(
                                     id = moduleRecord.id,
                                     name = moduleRecord.name,
                                     courses = studyRepository.fetchCourses(moduleRecord.id).map { courseRecord ->
-                                        Course(
+                                        StudyCourse(
                                             id = courseRecord.id,
                                             name = courseRecord.name,
                                             ects = courseRecord.ects,

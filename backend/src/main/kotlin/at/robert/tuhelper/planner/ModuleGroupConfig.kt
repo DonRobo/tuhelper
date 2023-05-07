@@ -4,7 +4,7 @@ import at.robert.tuhelper.data.StudyModule
 import at.robert.tuhelper.planner.ModuleSelector.Companion.byConfigString
 import at.robert.tuhelper.planner.ModuleSelector.Companion.newModule
 
-class ModuleGroupConfig {
+class ModuleGroupConfig : SelectorBasedConfig<StudyModule, ModuleConfig> {
 
     val modules = mutableListOf<Pair<ModuleSelector, ModuleConfig>>()
     fun module(configString: String, block: ModuleConfig.() -> Unit) {
@@ -31,5 +31,13 @@ class ModuleGroupConfig {
                 )
             ) to config
         )
+    }
+
+    override var handleDefaults: DefaultHandling = DefaultHandling.FAIL
+    override val subConfigs: List<Pair<Selector<StudyModule>, ModuleConfig>>
+        get() = modules
+
+    override fun createSubConfig(obj: StudyModule): ModuleConfig {
+        return ModuleConfig()
     }
 }

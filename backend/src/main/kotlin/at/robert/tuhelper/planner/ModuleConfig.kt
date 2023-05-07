@@ -1,24 +1,37 @@
 package at.robert.tuhelper.planner
 
-import at.robert.tuhelper.data.Course
+import at.robert.tuhelper.data.StudyCourse
 
-class ModuleConfig {
+class ModuleConfig : SelectorBasedConfig<StudyCourse, CourseConfig> {
 
     var required: Boolean = false
     var excluded: Boolean = false
 
-    val courses = mutableListOf<Pair<String, CourseConfig>>()
-    val coursesToAdd = mutableListOf<Pair<Course, CourseConfig>>()
+    private val courseConfigs = mutableListOf<Pair<CourseSelector, CourseConfig>>()
 
-    fun addCourses(courses: List<Course>, block: CourseConfig.(Course) -> Unit) {
-        coursesToAdd.addAll(courses.map { it to CourseConfig().apply { block(it) } })
+    fun addCourses(courses: List<StudyCourse>, block: CourseConfig.() -> Unit) {
+        courses.forEach {
+            addCourse(it, block)
+        }
+    }
+
+    private fun addCourse(course: StudyCourse, block: CourseConfig.() -> Unit) {
+        val config = createSubConfig(course)
+        config.block()
+        courseConfigs.add(CourseSelector.course(course) to config)
     }
 
     fun addCourse(courseName: String, block: CourseConfig.() -> Unit) {
-        val config = CourseConfig()
-        config.block()
-        courses.add(courseName to config)
+        val course = StudyCourse(-1, courseName, null)
+        addCourse(course, block)
     }
 
     var maxEcts: Float? = null
+    override var handleDefaults: DefaultHandling = DefaultHandling.ADD
+    override val subConfigs: List<Pair<Selector<StudyCourse>, CourseConfig>>
+        get() = courseConfigs
+
+    override fun createSubConfig(obj: StudyCourse): CourseConfig {
+        return CourseConfig()
+    }
 }

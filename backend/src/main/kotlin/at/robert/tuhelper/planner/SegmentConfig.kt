@@ -2,7 +2,7 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudyModuleGroup
 
-class SegmentConfig {
+class SegmentConfig : SelectorBasedConfig<StudyModuleGroup, ModuleGroupConfig> {
     var requiredEcts: Float? = null
 
     val moduleGroups = mutableListOf<Pair<ModuleGroupSelector, ModuleGroupConfig>>()
@@ -36,5 +36,14 @@ class SegmentConfig {
                 )
             ) to config
         )
+    }
+
+    override var handleDefaults: DefaultHandling = DefaultHandling.FAIL
+
+    override val subConfigs: List<Pair<Selector<StudyModuleGroup>, ModuleGroupConfig>>
+        get() = moduleGroups
+
+    override fun createSubConfig(obj: StudyModuleGroup): ModuleGroupConfig {
+        return ModuleGroupConfig()
     }
 }

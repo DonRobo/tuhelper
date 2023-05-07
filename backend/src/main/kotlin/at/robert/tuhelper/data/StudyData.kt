@@ -23,10 +23,10 @@ data class StudyModuleGroup(
 data class StudyModule(
     val id: Int,
     val name: String,
-    val courses: List<Course>
+    val courses: List<StudyCourse>
 )
 
-data class Course(
+data class StudyCourse(
     val id: Int,
     val name: String,
     val ects: BigDecimal?,

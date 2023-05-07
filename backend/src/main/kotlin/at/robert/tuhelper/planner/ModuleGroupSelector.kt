@@ -2,8 +2,12 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudyModuleGroup
 
-interface ModuleGroupSelector {
+interface ModuleGroupSelector : Selector<StudyModuleGroup> {
     fun chooseModuleGroup(moduleGroupList: List<StudyModuleGroup>): StudyModuleGroup
+
+    override fun choose(from: List<StudyModuleGroup>): List<StudyModuleGroup> {
+        return listOf(chooseModuleGroup(from))
+    }
 
     companion object {
         fun byConfigString(configString: String): ModuleGroupSelector {

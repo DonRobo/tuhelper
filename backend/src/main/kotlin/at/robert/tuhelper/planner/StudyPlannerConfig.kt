@@ -2,7 +2,15 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudySegment
 
-class StudyPlannerConfig {
+class StudyPlannerConfig : SelectorBasedConfig<StudySegment, SegmentConfig> {
+
+    override var handleDefaults = DefaultHandling.FAIL
+    override val subConfigs: List<Pair<Selector<StudySegment>, SegmentConfig>>
+        get() = segmentsConfigs
+
+    override fun createSubConfig(obj: StudySegment): SegmentConfig {
+        return SegmentConfig()
+    }
 
     val segmentsConfigs = mutableListOf<Pair<SegmentSelector, SegmentConfig>>()
 

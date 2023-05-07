@@ -17,7 +17,7 @@ class StudyPlannerService(
             "921" -> {
                 studyPlanner.configure {
                     segment("Major") {
-                        moduleGroups('A' to 'A') {
+                        moduleGroups('A' to 'J') {
                             module("Compulsory 1") {
                                 required = true
                             }
@@ -27,15 +27,20 @@ class StudyPlannerService(
                             module("N") {
                                 maxEcts = 4f
                             }
+                            handleDefaults = DefaultHandling.ADD
                         }
+                        handleDefaults = DefaultHandling.IGNORE
                     }
+                    handleDefaults = DefaultHandling.IGNORE
 //                    segment("Minor") {
-//                        moduleGroups('A' to 'M') {
+//                        moduleGroups('B' to 'B') {
 //                            module("Compulsory 1") {
 //                                required = true
 //                            }
 //                            excludeModule("N")
+//                            handleDefaults = DefaultHandling.ADD
 //                        }
+//                        handleDefaults = DefaultHandling.IGNORE
 //                    }
 //                    addSegment("Frei") {
 //                        addModuleGroup("Frei") {

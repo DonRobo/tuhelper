@@ -2,9 +2,13 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudySegment
 
-interface SegmentSelector {
+interface SegmentSelector : Selector<StudySegment> {
 
     fun chooseSegment(segmentList: List<StudySegment>): StudySegment
+
+    override fun choose(from: List<StudySegment>): List<StudySegment> {
+        return listOf(chooseSegment(from))
+    }
 
     companion object {
         fun nameContains(string: String): SegmentSelector {

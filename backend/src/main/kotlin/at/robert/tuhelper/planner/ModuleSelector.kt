@@ -2,9 +2,13 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudyModule
 
-interface ModuleSelector {
+interface ModuleSelector : Selector<StudyModule> {
 
     fun chooseModule(moduleList: List<StudyModule>): StudyModule?
+
+    override fun choose(from: List<StudyModule>): List<StudyModule> {
+        return listOfNotNull(chooseModule(from))
+    }
 
     companion object {
         fun byConfigString(configString: String, optional: Boolean = false): ModuleSelector {
