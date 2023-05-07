@@ -3,7 +3,7 @@ package at.robert.tuhelper.planner
 import at.robert.tuhelper.data.StudyModuleGroup
 
 class SegmentConfig {
-    var requiredEcts: Int? = null
+    var requiredEcts: Float? = null
 
     val moduleGroups = mutableListOf<Pair<ModuleGroupSelector, ModuleGroupConfig>>()
 

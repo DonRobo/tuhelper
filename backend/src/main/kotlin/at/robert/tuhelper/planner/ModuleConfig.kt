@@ -8,13 +8,10 @@ class ModuleConfig {
     var excluded: Boolean = false
 
     val courses = mutableListOf<Pair<String, CourseConfig>>()
-    val coursesToAdd = mutableListOf<Course>()
-    fun required() {
-        required = true
-    }
+    val coursesToAdd = mutableListOf<Pair<Course, CourseConfig>>()
 
-    fun addCourses(courses: List<Course>) {
-        coursesToAdd.addAll(courses)
+    fun addCourses(courses: List<Course>, block: CourseConfig.(Course) -> Unit) {
+        coursesToAdd.addAll(courses.map { it to CourseConfig().apply { block(it) } })
     }
 
     fun addCourse(courseName: String, block: CourseConfig.() -> Unit) {
@@ -23,9 +20,5 @@ class ModuleConfig {
         courses.add(courseName to config)
     }
 
-    fun excluded() {
-        excluded = true
-    }
-
-    var maxEcts: Int? = null
+    var maxEcts: Float? = null
 }

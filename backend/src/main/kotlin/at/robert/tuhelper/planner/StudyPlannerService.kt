@@ -17,45 +17,46 @@ class StudyPlannerService(
             "921" -> {
                 studyPlanner.configure {
                     segment("Major") {
-                        moduleGroups('A' to 'J') {
+                        moduleGroups('A' to 'A') {
                             module("Compulsory 1") {
-                                required()
+                                required = true
                             }
                             module("Compulsory 2") {
-                                required()
+                                required = true
                             }
                             module("N") {
-                                maxEcts = 4
+                                maxEcts = 4f
                             }
                         }
                     }
-                    segment("Minor") {
-                        moduleGroups('A' to 'M') {
-                            module("Compulsory 1") {
-                                required()
-                            }
-                            excludeModule("N")
-                        }
-                    }
-                    addSegment("Frei") {
-                        addModuleGroup("Frei") {
-                            addModule("Frei") {
-                                addCourses(studyPlanner.allCourses())
-                            }
-                        }
-                        requiredEcts = 6
-                    }
-                    addSegment("Masterarbeit") {
-                        addModuleGroup("Masterarbeit") {
-                            addModule("Masterarbeit") {
-                                addCourse("Masterarbeit") {
-                                    ects = 30
-                                    required = true
-                                }
-                            }
-                        }
-                        requiredEcts = 30
-                    }
+//                    segment("Minor") {
+//                        moduleGroups('A' to 'M') {
+//                            module("Compulsory 1") {
+//                                required = true
+//                            }
+//                            excludeModule("N")
+//                        }
+//                    }
+//                    addSegment("Frei") {
+//                        addModuleGroup("Frei") {
+//                            addModule("Frei") {
+//                                addCourses(studyPlanner.allCourses()){
+//                                }
+//                            }
+//                        }
+//                        requiredEcts = 6f
+//                    }
+//                    addSegment("Masterarbeit") {
+//                        addModuleGroup("Masterarbeit") {
+//                            addModule("Masterarbeit") {
+//                                addCourse("Masterarbeit") {
+//                                    ects = 30f
+//                                    required = true
+//                                }
+//                            }
+//                        }
+//                        requiredEcts = 30f
+//                    }
                 }
             }
 

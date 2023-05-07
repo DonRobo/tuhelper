@@ -7,7 +7,6 @@ import at.robert.tuhelper.planner.ModuleSelector.Companion.newModule
 class ModuleGroupConfig {
 
     val modules = mutableListOf<Pair<ModuleSelector, ModuleConfig>>()
-
     fun module(configString: String, block: ModuleConfig.() -> Unit) {
         val config = ModuleConfig()
         config.block()
@@ -16,7 +15,7 @@ class ModuleGroupConfig {
 
     fun excludeModule(configString: String) {
         val config = ModuleConfig()
-        config.excluded()
+        config.excluded = true
         modules.add(byConfigString(configString, optional = true) to config)
     }
 
