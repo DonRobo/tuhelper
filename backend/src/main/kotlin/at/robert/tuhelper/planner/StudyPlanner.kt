@@ -163,13 +163,25 @@ class StudyPlanner(
                 configureSegment(segment, conf)
             },
         ).also { studyPlan ->
-            val courses = studyPlan.solverSegments.flatMap { solverSegment ->
-                solverSegment.moduleGroups.flatMap { moduleGroup ->
-                    moduleGroup.modules.flatMap { module ->
-                        module.courses
-                    }
+            val moduleGroups = studyPlan.solverSegments.flatMap { solverSegment ->
+                solverSegment.moduleGroups
+            }
+            val courses = moduleGroups.flatMap { moduleGroup ->
+                moduleGroup.modules.flatMap { module ->
+                    module.courses
                 }
             }
+
+            courses.groupBy { it.course.name }.filter { it.value.size > 1 }.forEach { (_, courses) ->
+                println("Course ${courses.first().course.name} has ${courses.size} instances")
+                model.sum(courses.map { it.chosen }.toTypedArray(), "<=", 1).post()
+            }
+            moduleGroups.groupBy { it.studyModuleGroup.letter }.filter { it.key != null && it.value.size > 1 }
+                .forEach { (_, moduleGroups) ->
+                    println("Module group ${moduleGroups.first().studyModuleGroup.name} has ${moduleGroups.size} instances")
+                    model.sum(moduleGroups.map { it.chosen }.toTypedArray(), "<=", 1).post()
+                }
+
             val effort = model.intVar(
                 "total effort",
                 courses.sumOf { it.effortChosen.lb },

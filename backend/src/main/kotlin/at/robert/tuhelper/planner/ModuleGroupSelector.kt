@@ -47,3 +47,12 @@ interface ModuleGroupSelector : Selector<StudyModuleGroup> {
         }
     }
 }
+
+val StudyModuleGroup.letter: Char?
+    get() {
+        val regex = Regex("\\[.+\\/.+\\/.+([A-Z])] ([A-Z]): .+")
+        val match = regex.matchEntire(name) ?: return null.also {
+            println("No letter found in module group name: $name")
+        }
+        return match.groupValues[1].single()
+    }
