@@ -1,6 +1,7 @@
 package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.*
+import at.robert.tuhelper.log
 import org.chocosolver.solver.Model
 import org.chocosolver.solver.variables.BoolVar
 import org.chocosolver.solver.variables.IntVar
@@ -10,7 +11,8 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 class StudyPlanner(
-    private val studyData: StudyData
+    private val studyData: StudyData,
+    private val effortData: Map<String, Double>,
 ) {
     private var config = StudyPlannerConfig()
     private val effortScale = 100f
@@ -29,13 +31,18 @@ class StudyPlanner(
 
         val totalEffortVar = model.vars.singleOrNull { it.name == "total effort" }
 
+        val courses = configurationStudyPlan.solverSegments
+            .flatMap { it.moduleGroups }
+            .flatMap { it.modules }
+            .flatMap { it.courses }
+
         var studyPlan: StudyPlan? = null
-        model.solver.limitTime("5s")
+        model.solver.limitTime("10s")
         var `continue` = true
         while (`continue`) {
             val solved = model.solver.solve()
             if (solved) {
-                println("Found solution with effort ${totalEffortVar?.asIntVar()?.value}")
+                log.info("Found solution with effort ${totalEffortVar?.asIntVar()?.value}")
                 studyPlan = configurationStudyPlan.generate()
             } else
                 `continue` = false
@@ -43,7 +50,7 @@ class StudyPlanner(
         if (studyPlan == null) {
             error("No solution found: " + model.solver.contradictionException)
         } else {
-            println("Solution found")
+            log.info("Solution found")
         }
 
         return studyPlan
@@ -58,7 +65,10 @@ class StudyPlanner(
             course: StudyCourse,
             conf: CourseConfig
         ): SolverCourse {
-            val effortMultiplier = conf.effortMultiplier * effortScale
+            val effortMultiplier = effortData.getOrDefault(course.actualName, 1.0) * effortScale
+            if (effortData.containsKey(course.actualName)) {
+                log.debug("Effort multiplier for ${course.name} is $effortMultiplier")
+            }
             val ects = conf.ects ?: course.ects?.toFloat() ?: 0f
             val scaledEcts = ects.toScaledEcts()
             val effort = max((ects * effortMultiplier).roundToInt(), 1)
@@ -121,12 +131,12 @@ class StudyPlanner(
 
         fun configureModuleGroup(
             moduleGroup: StudyModuleGroup,
-            conf: ModuleGroupConfig
+            moduleGroupConfig: ModuleGroupConfig
         ): SolverModuleGroup {
             val chosen = model.boolVar("chose ${moduleGroup.name}" + id())
 
-            val solverModules = conf.configureSubs(moduleGroup.modules) { conf, obj ->
-                configureModule(chosen, obj, conf)
+            val solverModules = moduleGroupConfig.configureSubs(moduleGroup.modules) { moduleConfig, obj ->
+                configureModule(chosen, obj, moduleConfig)
             }
             val ectsChosen = model.intVar("ectsChosen for module group ${moduleGroup.name}" + id(),
                 solverModules.sumOf { it.ectsChosen.lb },
@@ -148,9 +158,9 @@ class StudyPlanner(
             )
         }
 
-        fun configureSegment(segment: StudySegment, conf: SegmentConfig): SolverSegment {
-            val solverModuleGroups = conf.configureSubs(segment.moduleGroups) { conf, obj ->
-                configureModuleGroup(obj, conf)
+        fun configureSegment(segment: StudySegment, segmentConfig: SegmentConfig): SolverSegment {
+            val solverModuleGroups = segmentConfig.configureSubs(segment.moduleGroups) { moduleGroupConfig, obj ->
+                configureModuleGroup(obj, moduleGroupConfig)
             }
 
             val ectsChosen = model.intVar("ectsChosen for segment ${segment.name}" + id(),
@@ -161,7 +171,7 @@ class StudyPlanner(
             model.sum(solverModuleGroups.map { it.ectsChosen }.toTypedArray(), "=", ectsChosen).post()
             model.sum(solverModuleGroups.map { it.chosen }.toTypedArray(), "=", 1).post()
 
-            val requiredEcts = (conf.requiredEcts ?: segment.ects?.toFloat()).toScaledEcts()
+            val requiredEcts = (segmentConfig.requiredEcts ?: segment.ects?.toFloat()).toScaledEcts()
             model.arithm(ectsChosen, ">=", requiredEcts).post()
 
             return SolverSegment(
@@ -185,15 +195,39 @@ class StudyPlanner(
                 }
             }
 
-            courses.groupBy { it.course.name }.filter { it.value.size > 1 }.forEach { (_, courses) ->
-                println("Course ${courses.first().course.name} has ${courses.size} instances")
+            courses.groupBy { it.course.actualName }.filter { it.value.size > 1 }.forEach { (_, courses) ->
+                log.trace("Course ${courses.first().course.name} has ${courses.size} instances")
                 model.sum(courses.map { it.chosen }.toTypedArray(), "<=", 1).post()
             }
             moduleGroups.groupBy { it.studyModuleGroup.letter }.filter { it.key != null && it.value.size > 1 }
                 .forEach { (_, moduleGroups) ->
-                    println("Module group ${moduleGroups.first().studyModuleGroup.name} has ${moduleGroups.size} instances")
+                    log.debug("Module group ${moduleGroups.first().studyModuleGroup.name} has ${moduleGroups.size} instances")
                     model.sum(moduleGroups.map { it.chosen }.toTypedArray(), "<=", 1).post()
                 }
+
+            if (config.combineCourseTypes) {
+                val regex = Regex("(.*), [A-Z]{2}")
+                courses.groupBy {
+                    val match = regex.matchEntire(it.course.actualName)
+                    if (match != null) {
+                        match.groupValues[1].lowercase()
+                    } else {
+                        null
+                    }
+                }.filterKeys { it != null }.forEach { (_, courses) ->
+                    val combinedByName = courses.groupBy { it.course.actualName }
+                    if (combinedByName.size == 1) return@forEach
+                    val vars = combinedByName.map { (_, sameCourses) ->
+                        if (sameCourses.size == 1) return@map sameCourses.first().chosen
+
+                        val anyChosen = model.boolVar("chose any of ${sameCourses.first().course.actualName}" + id())
+                        if (sameCourses.isNotEmpty())
+                            model.sum(sameCourses.map { it.chosen }.toTypedArray(), "=", anyChosen).post()
+                        anyChosen
+                    }
+                    model.allEqual(*vars.toTypedArray()).post()
+                }
+            }
 
             val effort = model.intVar(
                 "total effort",
@@ -219,9 +253,9 @@ class StudyPlanner(
             }
         }.filter { it.chosen.value == 1 }
 
-        println(courses.joinToString { it.course.name })
-        println("Total ects: " + courses.sumOf { it.ectsChosen.value / ectsScale.toDouble() })
-        println("Total effort: " + courses.sumOf { it.effortChosen.value.toDouble() })
+        log.debug(courses.joinToString { it.course.name })
+        log.debug("Total ects: " + courses.sumOf { it.ectsChosen.value / ectsScale.toDouble() })
+        log.debug("Total effort: " + courses.sumOf { it.effortChosen.value.toDouble() })
 
         return StudyPlan(
             this.solverSegments.map {

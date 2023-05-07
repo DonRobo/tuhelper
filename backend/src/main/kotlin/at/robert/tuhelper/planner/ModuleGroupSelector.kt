@@ -1,6 +1,7 @@
 package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.StudyModuleGroup
+import at.robert.tuhelper.log
 
 interface ModuleGroupSelector : Selector<StudyModuleGroup> {
     fun chooseModuleGroup(moduleGroupList: List<StudyModuleGroup>): StudyModuleGroup
@@ -52,7 +53,7 @@ val StudyModuleGroup.letter: Char?
     get() {
         val regex = Regex("\\[.+\\/.+\\/.+([A-Z])] ([A-Z]): .+")
         val match = regex.matchEntire(name) ?: return null.also {
-            println("No letter found in module group name: $name")
+            log.trace("No letter found in module group name: $name")
         }
         return match.groupValues[1].single()
     }

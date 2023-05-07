@@ -30,4 +30,6 @@ data class StudyCourse(
     val id: Int,
     val name: String,
     val ects: BigDecimal?,
-)
+) {
+    val actualName: String = Regex("\\[.*\\] ").replaceFirst(name, "")
+}

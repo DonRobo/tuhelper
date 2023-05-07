@@ -4,6 +4,8 @@ import at.robert.tuhelper.data.StudySegment
 
 class StudyPlannerConfig : SelectorBasedConfig<StudySegment, SegmentConfig> {
 
+    var combineCourseTypes: Boolean = true
+
     override var handleDefaults = DefaultHandling.FAIL
     override val subConfigs: List<Pair<Selector<StudySegment>, SegmentConfig>>
         get() = segmentsConfigs

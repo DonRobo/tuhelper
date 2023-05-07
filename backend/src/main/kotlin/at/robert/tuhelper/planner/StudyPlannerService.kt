@@ -1,5 +1,6 @@
 package at.robert.tuhelper.planner
 
+import at.robert.tuhelper.repository.EffortRepository
 import at.robert.tuhelper.tugraz.StudyService
 import org.springframework.stereotype.Service
 
@@ -7,11 +8,13 @@ import org.springframework.stereotype.Service
 @Service
 class StudyPlannerService(
     private val studyService: StudyService,
+    private val effortRepository: EffortRepository,
 ) {
 
     fun planStudy(studyNumber: String): StudyPlan {
         val studyData = studyService.getStudyData(studyNumber)
-        val studyPlanner = StudyPlanner(studyData)
+        val effortData = effortRepository.getAllEffortMultipliers()
+        val studyPlanner = StudyPlanner(studyData, effortData)
 
         when (studyNumber) {
             "921" -> {
@@ -33,7 +36,7 @@ class StudyPlannerService(
                     }
                     handleDefaults = DefaultHandling.IGNORE
                     segment("Minor") {
-                        moduleGroups('B' to 'B') {
+                        moduleGroups('A' to 'M') {
                             module("Compulsory 1") {
                                 required = true
                             }
