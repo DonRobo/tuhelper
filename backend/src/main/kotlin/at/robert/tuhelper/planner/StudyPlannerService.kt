@@ -32,36 +32,36 @@ class StudyPlannerService(
                         handleDefaults = DefaultHandling.IGNORE
                     }
                     handleDefaults = DefaultHandling.IGNORE
-//                    segment("Minor") {
-//                        moduleGroups('B' to 'B') {
-//                            module("Compulsory 1") {
-//                                required = true
-//                            }
-//                            excludeModule("N")
-//                            handleDefaults = DefaultHandling.ADD
-//                        }
-//                        handleDefaults = DefaultHandling.IGNORE
-//                    }
-//                    addSegment("Frei") {
-//                        addModuleGroup("Frei") {
-//                            addModule("Frei") {
-//                                addCourses(studyPlanner.allCourses()){
-//                                }
-//                            }
-//                        }
-//                        requiredEcts = 6f
-//                    }
-//                    addSegment("Masterarbeit") {
-//                        addModuleGroup("Masterarbeit") {
-//                            addModule("Masterarbeit") {
-//                                addCourse("Masterarbeit") {
-//                                    ects = 30f
-//                                    required = true
-//                                }
-//                            }
-//                        }
-//                        requiredEcts = 30f
-//                    }
+                    segment("Minor") {
+                        moduleGroups('B' to 'B') {
+                            module("Compulsory 1") {
+                                required = true
+                            }
+                            excludeModule("N")
+                            handleDefaults = DefaultHandling.ADD
+                        }
+                        handleDefaults = DefaultHandling.IGNORE
+                    }
+                    addSegment("Frei") {
+                        addModuleGroup("Frei") {
+                            addModule("Frei") {
+                                addCourses(studyPlanner.allCourses()) {
+                                }
+                            }
+                        }
+                        requiredEcts = 6f
+                    }
+                    addSegment("Masterarbeit") {
+                        addModuleGroup("Masterarbeit") {
+                            addModule("Masterarbeit") {
+                                addCourse("Masterarbeit") {
+                                    ects = 30f
+                                    required = true
+                                }
+                            }
+                        }
+                        requiredEcts = 30f
+                    }
                 }
             }
 
