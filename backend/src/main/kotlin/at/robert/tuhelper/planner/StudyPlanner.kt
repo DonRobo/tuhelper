@@ -2,9 +2,9 @@ package at.robert.tuhelper.planner
 
 import at.robert.tuhelper.data.*
 import at.robert.tuhelper.log
-import org.chocosolver.solver.Model
-import org.chocosolver.solver.variables.BoolVar
-import org.chocosolver.solver.variables.IntVar
+import com.google.ortools.Loader
+import com.google.ortools.sat.*
+import com.google.ortools.util.Domain
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -14,6 +14,10 @@ class StudyPlanner(
     private val studyData: StudyData,
     private val effortData: Map<String, Double>,
 ) {
+    init {
+        Loader.loadNativeLibraries()
+    }
+
     private var config = StudyPlannerConfig()
     private val effortScale = 100f
     private val ectsScale = 10f
@@ -25,30 +29,43 @@ class StudyPlanner(
     }
 
     fun solve(): StudyPlan {
-        val model = Model("Master")
+        val model = CpModel()
 
-        val configurationStudyPlan = generateForModel(model)
-
-        val totalEffortVar = model.vars.singleOrNull { it.name == "total effort" }
+        val (configurationStudyPlan, totalEffortVar) = generateForModel(model)
 
         val courses = configurationStudyPlan.solverSegments
             .flatMap { it.moduleGroups }
             .flatMap { it.modules }
             .flatMap { it.courses }
 
+        val solver = CpSolver()
         var studyPlan: StudyPlan? = null
-        model.solver.limitTime("10s")
         var `continue` = true
         while (`continue`) {
-            val solved = model.solver.solve()
-            if (solved) {
-                log.info("Found solution with effort ${totalEffortVar?.asIntVar()?.value}")
-                studyPlan = configurationStudyPlan.generate()
-            } else
-                `continue` = false
+            val solved = solver.solve(model, object : CpSolverSolutionCallback() {
+                override fun onSolutionCallback() {
+                    log.debug("Solution found: ${objectiveValue()}")
+                }
+            })
+            when (solved) {
+                CpSolverStatus.FEASIBLE -> {
+                    log.warn("Sub-optimal solution found")
+                    studyPlan = configurationStudyPlan.generate(solver)
+                }
+
+                CpSolverStatus.OPTIMAL -> {
+                    log.info("Optimal solution found: ${solver.objectiveValue()}")
+                    studyPlan = configurationStudyPlan.generate(solver)
+                    `continue` = false
+                }
+
+                else -> {
+                    error("No solution found: $solved")
+                }
+            }
         }
         if (studyPlan == null) {
-            error("No solution found: " + model.solver.contradictionException)
+            error("No solution found")
         } else {
             log.info("Solution found")
         }
@@ -56,9 +73,11 @@ class StudyPlanner(
         return studyPlan
     }
 
-    private fun generateForModel(model: Model): SolverStudyPlan {
+    private fun generateForModel(model: CpModel): Pair<SolverStudyPlan, IntVar> {
         var id = 1
         fun id() = id++
+
+        fun domainOf(vararg values: Number) = Domain.fromValues(values.map { it.toLong() }.toLongArray())
 
         fun configureCourse(
             moduleGroupChosen: BoolVar,
@@ -73,16 +92,16 @@ class StudyPlanner(
             val scaledEcts = ects.toScaledEcts()
             val effort = max((ects * effortMultiplier).roundToInt(), 1)
 
-            val chosen = model.boolVar("chose ${course.name}" + id())
-            val ectsChosen = model.intVar("ectsChosen for ${course.name}" + id(), intArrayOf(0, scaledEcts))
-            val effortChosen = model.intVar("effortChosen for ${course.name}" + id(), intArrayOf(0, effort))
+            val chosen = model.newBoolVar("chose ${course.name}" + id())
+            val ectsChosen = model.newIntVarFromDomain(domainOf(0, scaledEcts), "ectsChosen for ${course.name}" + id())
+            val effortChosen = model.newIntVarFromDomain(domainOf(0, effort), "effortChosen for ${course.name}" + id())
 
             if (conf.required) {
-                moduleGroupChosen.eq(1).imp(chosen.eq(1)).post()
+                model.addEquality(chosen, 1).onlyEnforceIf(moduleGroupChosen)
             }
 
-            ectsChosen.eq(chosen.mul(scaledEcts)).post()
-            effortChosen.eq(chosen.mul(effort)).post()
+            model.addEquality(ectsChosen, LinearExpr.term(chosen, scaledEcts.toLong()))
+            model.addEquality(effortChosen, LinearExpr.term(chosen, effort.toLong()))
 
             return SolverCourse(
                 course.copy(ects = ects.toBigDecimal()),
@@ -112,14 +131,15 @@ class StudyPlanner(
                 )
             }
 
-            val ectsChosen = model.intVar("ectsChosen for ${module.name}" + id(),
-                courses.sumOf { it.ectsChosen.lb },
-                courses.sumOf { it.ectsChosen.ub }
+            val ectsChosen = model.newIntVar(
+                courses.sumOf { it.ectsChosen.domain.min() },
+                courses.sumOf { it.ectsChosen.domain.max() },
+                "ectsChosen for ${module.name}" + id()
             )
-            model.sum(courses.map { it.ectsChosen }.toTypedArray(), "=", ectsChosen).post()
+            model.addEquality(ectsChosen, LinearExpr.sum(courses.map { it.ectsChosen }.toTypedArray()))
 
             if (moduleConfig.maxEcts != null)
-                model.arithm(ectsChosen, "<=", moduleConfig.maxEcts.toScaledEcts()).post()
+                model.addLessOrEqual(ectsChosen, moduleConfig.maxEcts.toScaledEcts().toLong())
 
             return SolverModule(
                 module,
@@ -133,20 +153,21 @@ class StudyPlanner(
             moduleGroup: StudyModuleGroup,
             moduleGroupConfig: ModuleGroupConfig
         ): SolverModuleGroup {
-            val chosen = model.boolVar("chose ${moduleGroup.name}" + id())
+            val chosen = model.newBoolVar("chose ${moduleGroup.name}" + id())
 
             val solverModules = moduleGroupConfig.configureSubs(moduleGroup.modules) { moduleConfig, obj ->
                 configureModule(chosen, obj, moduleConfig)
             }
-            val ectsChosen = model.intVar("ectsChosen for module group ${moduleGroup.name}" + id(),
-                solverModules.sumOf { it.ectsChosen.lb },
-                solverModules.sumOf { it.ectsChosen.ub }
+            val ectsChosen = model.newIntVar(
+                solverModules.sumOf { it.ectsChosen.domain.min() },
+                solverModules.sumOf { it.ectsChosen.domain.max() },
+                "ectsChosen for module group ${moduleGroup.name}" + id(),
             )
-            model.sum(solverModules.map { it.ectsChosen }.toTypedArray(), "=", ectsChosen).post()
+            model.addEquality(ectsChosen, LinearExpr.sum(solverModules.map { it.ectsChosen }.toTypedArray()))
 
             solverModules.forEach { solverModule ->
                 solverModule.courses.forEach { solverCourse ->
-                    solverCourse.chosen.eq(1).imp(chosen.eq(1)).post()
+                    model.addImplication(solverCourse.chosen, chosen)
                 }
             }
 
@@ -163,16 +184,17 @@ class StudyPlanner(
                 configureModuleGroup(obj, moduleGroupConfig)
             }
 
-            val ectsChosen = model.intVar("ectsChosen for segment ${segment.name}" + id(),
-                solverModuleGroups.sumOf { it.ectsChosen.lb },
-                solverModuleGroups.sumOf { it.ectsChosen.ub }
+            val ectsChosen = model.newIntVar(
+                solverModuleGroups.sumOf { it.ectsChosen.domain.min() },
+                solverModuleGroups.sumOf { it.ectsChosen.domain.max() },
+                "ectsChosen for segment ${segment.name}" + id(),
             )
 
-            model.sum(solverModuleGroups.map { it.ectsChosen }.toTypedArray(), "=", ectsChosen).post()
-            model.sum(solverModuleGroups.map { it.chosen }.toTypedArray(), "=", 1).post()
+            model.addEquality(ectsChosen, LinearExpr.sum(solverModuleGroups.map { it.ectsChosen }.toTypedArray()))
+            model.addExactlyOne(solverModuleGroups.map { it.chosen }.toTypedArray())
 
             val requiredEcts = (segmentConfig.requiredEcts ?: segment.ects?.toFloat()).toScaledEcts()
-            model.arithm(ectsChosen, ">=", requiredEcts).post()
+            model.addGreaterOrEqual(ectsChosen, requiredEcts.toLong())
 
             return SolverSegment(
                 segment,
@@ -185,7 +207,7 @@ class StudyPlanner(
             config.configureSubs(studyData.segments) { conf, segment ->
                 configureSegment(segment, conf)
             },
-        ).also { studyPlan ->
+        ).let { studyPlan ->
             val moduleGroups = studyPlan.solverSegments.flatMap { solverSegment ->
                 solverSegment.moduleGroups
             }
@@ -197,16 +219,16 @@ class StudyPlanner(
 
             courses.groupBy { it.course.actualName }.filter { it.value.size > 1 }.forEach { (_, courses) ->
                 log.trace("Course ${courses.first().course.name} has ${courses.size} instances")
-                model.sum(courses.map { it.chosen }.toTypedArray(), "<=", 1).post()
+                model.addAtMostOne(courses.map { it.chosen }.toTypedArray())
             }
             moduleGroups.groupBy { it.studyModuleGroup.letter }.filter { it.key != null && it.value.size > 1 }
                 .forEach { (_, moduleGroups) ->
                     log.debug("Module group ${moduleGroups.first().studyModuleGroup.name} has ${moduleGroups.size} instances")
-                    model.sum(moduleGroups.map { it.chosen }.toTypedArray(), "<=", 1).post()
+                    model.addAtMostOne(moduleGroups.map { it.chosen }.toTypedArray())
                 }
 
             if (config.combineCourseTypes) {
-                val regex = Regex("(.*), [A-Z]{2}")
+                val regex = Regex("(.*?)(?: \\(.*\\))?, [A-Z]{2}")
                 courses.groupBy {
                     val match = regex.matchEntire(it.course.actualName)
                     if (match != null) {
@@ -220,68 +242,75 @@ class StudyPlanner(
                     val vars = combinedByName.map { (_, sameCourses) ->
                         if (sameCourses.size == 1) return@map sameCourses.first().chosen
 
-                        val anyChosen = model.boolVar("chose any of ${sameCourses.first().course.actualName}" + id())
-                        if (sameCourses.isNotEmpty())
-                            model.sum(sameCourses.map { it.chosen }.toTypedArray(), "=", anyChosen).post()
+                        val anyChosen = model.newBoolVar("chose any of ${sameCourses.first().course.actualName}" + id())
+                        require(sameCourses.isNotEmpty()) {
+                            "No courses in group"
+                        }
+                        model.addEquality(anyChosen, LinearExpr.sum(sameCourses.map { it.chosen }.toTypedArray()))
                         anyChosen
                     }
-                    model.allEqual(*vars.toTypedArray()).post()
+                    val first = vars.first()
+                    vars.drop(1).forEach {
+                        model.addEquality(first, it)
+                    }
                 }
             }
 
-            val effort = model.intVar(
+            val effort = model.newIntVar(
+                courses.sumOf { it.effortChosen.domain.min() },
+                courses.sumOf { it.effortChosen.domain.max() },
                 "total effort",
-                courses.sumOf { it.effortChosen.lb },
-                courses.sumOf { it.effortChosen.ub },
             )
 
-            model.sum(courses.map { it.effortChosen }.toTypedArray(), "=", effort).post()
+            model.addEquality(effort, LinearExpr.sum(courses.map { it.effortChosen }.toTypedArray()))
 
-            model.setObjective(
-                false,
-                effort
-            )
+            model.minimize(effort)
+
+            studyPlan to effort
         }
     }
 
-    private fun SolverStudyPlan.generate(): StudyPlan {
+    private fun SolverStudyPlan.generate(solver: CpSolver): StudyPlan {
+        fun IntVar.value(): Long = solver.value(this)
         val courses = this.solverSegments.flatMap {
             it.moduleGroups.flatMap {
                 it.modules.flatMap {
                     it.courses
                 }
             }
-        }.filter { it.chosen.value == 1 }
+        }.filter {
+            it.chosen.value() == 1L
+        }
 
         log.debug(courses.joinToString { it.course.name })
-        log.debug("Total ects: " + courses.sumOf { it.ectsChosen.value / ectsScale.toDouble() })
-        log.debug("Total effort: " + courses.sumOf { it.effortChosen.value.toDouble() })
+        log.debug("Total ects: " + courses.sumOf { it.ectsChosen.value() / ectsScale.toDouble() })
+        log.debug("Total effort: " + courses.sumOf { it.effortChosen.value() / effortScale.toDouble() })
 
         return StudyPlan(
             this.solverSegments.map {
-                it.generate()
+                it.generate(solver)
             }
         )
     }
 
-    private fun SolverSegment.generate(): PlannedStudySegment {
+    private fun SolverSegment.generate(solver: CpSolver): PlannedStudySegment {
         return PlannedStudySegment(
             id = studySegment.id,
             name = studySegment.name,
             requiredEcts = studySegment.ects?.toFloat() ?: 0f,
             moduleGroups = moduleGroups.mapNotNull {
-                it.generate()
+                it.generate(solver)
             }
         )
     }
 
-    private fun SolverModuleGroup.generate(): PlannedModuleGroup? {
-        return if (chosen.value == 1) {
+    private fun SolverModuleGroup.generate(solver: CpSolver): PlannedModuleGroup? {
+        return if (solver.booleanValue(chosen)) {
             PlannedModuleGroup(
                 id = studyModuleGroup.id,
                 name = studyModuleGroup.name,
                 modules.mapNotNull {
-                    it.generate()
+                    it.generate(solver)
                 }
             )
         } else {
@@ -289,12 +318,12 @@ class StudyPlanner(
         }
     }
 
-    private fun SolverModule.generate(): PlannedStudyModule? {
+    private fun SolverModule.generate(solver: CpSolver): PlannedStudyModule? {
         return PlannedStudyModule(
             id = this.studyModule.id,
             name = this.studyModule.name,
             courses = courses.mapNotNull {
-                it.generate()
+                it.generate(solver)
             },
             required = this.required,
         ).let {
@@ -302,12 +331,12 @@ class StudyPlanner(
         }
     }
 
-    private fun SolverCourse.generate(): PlannedStudyCourse? {
-        return if (chosen.value == 1) PlannedStudyCourse(
+    private fun SolverCourse.generate(solver: CpSolver): PlannedStudyCourse? {
+        return if (solver.booleanValue(chosen)) PlannedStudyCourse(
             id = this.course.id,
             name = this.course.name,
-            ects = this.ectsChosen.value / ectsScale,
-            effort = this.effortChosen.value / effortScale,
+            ects = solver.value(this.ectsChosen) / ectsScale,
+            effort = solver.value(this.effortChosen) / effortScale,
             required = this.required,
         ) else null
     }

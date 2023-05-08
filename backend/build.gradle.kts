@@ -42,7 +42,7 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
 
     implementation("org.jsoup:jsoup:1.15.4")
-    implementation("org.choco-solver:choco-solver:4.10.12")
+    implementation("com.google.ortools:ortools-java:9.6.2534")
 
     jooqGenerator("org.postgresql:postgresql:42.6.0")
 
