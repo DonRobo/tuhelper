@@ -1,53 +1,17 @@
 import {Link, useParams} from "react-router-dom";
 import React, {useEffect, useState} from "react";
-import {Button, Col, Form, ListGroup, ListGroupItem, Row} from "react-bootstrap";
+import {Button, Col, Row} from "react-bootstrap";
 import {
     PlannedModuleGroup,
     PlannedStudyCourse,
     PlannedStudyModule,
     PlannedStudySegment,
     PlanningControllerService,
-    StudyCourse,
     StudyData,
     StudyDataControllerService,
     StudyPlan
 } from "./generated";
-
-function CourseListEntry(course: StudyCourse): JSX.Element {
-    const [collapsed, setCollapsed] = useState(true);
-    const [effort, setEffort] = useState<number | undefined>(undefined);
-
-    useEffect(() => {
-        if (!collapsed)
-            StudyDataControllerService.courseEffort(course.actualName).then(effort => {
-                setEffort(effort);
-                setEffortSetting(effort);
-            });
-    }, [course, collapsed]);
-
-    const [effortSetting, setEffortSetting] = useState<number>(1.0);
-
-    const saveEffortSetting = () => {
-        StudyDataControllerService.setEffort(course.actualName, effortSetting).then(() => {
-            setEffort(effortSetting);
-        });
-    };
-
-    if (collapsed) {
-        return <div onClick={() => setCollapsed(!collapsed)}>{course.actualName}</div>
-    } else {
-        return <div>
-            <Row onClick={() => setCollapsed(!collapsed)}>{course.actualName}</Row>
-            <Row>
-                <Form.Label>Effort = {effortSetting}</Form.Label>
-                <Form.Range step={0.05} min={0} max={10} value={effortSetting}
-                            onChange={(event) => setEffortSetting(parseFloat(event.target.value))}>
-                </Form.Range>
-                {effort && effort !== effortSetting ? <Button onClick={saveEffortSetting}>Save</Button> : ''}
-            </Row>
-        </div>
-    }
-}
+import {CourseList} from "./CourseList";
 
 function StudyPlanComponent(studyPlan: StudyPlan) {
     const allCourses = studyPlan.studySegments
@@ -64,40 +28,11 @@ function StudyPlanComponent(studyPlan: StudyPlan) {
 
     return <div>
         <h1>Segments</h1>
-        {studyPlan.studySegments.map(segment => <ShowStudySegment key={segment.id} {...segment}/>)}
+        {studyPlan.studySegments.map(segment => <ShowStudySegment key={segment.id + segment.name} {...segment}/>)}
         <h1>Total</h1>
         <div>{totalEcts} ECTS</div>
         <div>{totalEffort} effort adjusted ECTS</div>
     </div>;
-}
-
-function CourseList(studyData: StudyData): JSX.Element {
-    const [filter, setFilter] = useState<string>('');
-
-    return <>
-        <Form>
-            <Form.Label htmlFor="filterInput">Filter</Form.Label>
-            <Form.Control type="text" id="filterInput" value={filter} onChange={(event) => {
-                setFilter(event.target.value);
-            }}/>
-        </Form>
-        <ListGroup style={{maxHeight: '80vh', overflowY: 'auto'}}>
-            {
-                studyData.segments
-                    .flatMap(segment => segment.moduleGroups)
-                    .flatMap(moduleGroup => moduleGroup.modules)
-                    .flatMap(module => module.courses)
-                    .filter((course, index, self) =>
-                        self.findIndex(c => c.id === course.id || c.actualName === course.actualName) === index
-                    )
-                    .filter(course => {
-                        return course.actualName.toLowerCase().includes(filter.toLowerCase());
-                    })
-                    .sort((a, b) => a.actualName.localeCompare(b.actualName))
-                    .map(course => <ListGroupItem
-                        key={course.id}><CourseListEntry {...course}/></ListGroupItem>)
-            }
-        </ListGroup></>;
 }
 
 export function Study() {
@@ -160,7 +95,7 @@ export function Study() {
 function ShowCourse(course: PlannedStudyCourse): JSX.Element {
     return <div>
         {course.name} ({course.ects ? `${course.ects} ECTS` : ''}
-        {course.effort && course.ects != course.effort ? ` (${course.effort} effort adjusted ECTS)` : ''})
+        {course.effort && course.ects !== course.effort ? ` (${course.effort} effort adjusted ECTS)` : ''})
     </div>;
 }
 
